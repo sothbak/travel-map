@@ -5,8 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>World Map — Pins + Photos</title>
 
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="" crossorigin="" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
 
   <style>
     :root{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;}
@@ -15,7 +14,6 @@
     header h1{margin:0;font-size:18px}
     #map{flex:1;min-height:300px}
 
-    /* Modal / gallery */
     .modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.55);opacity:0;pointer-events:none;transition:opacity .15s}
     .modal.open{opacity:1;pointer-events:auto}
     .modal-content{background:#fff;border-radius:10px;padding:12px;max-width:1100px;width:94%;max-height:88%;overflow:auto;box-shadow:0 10px 30px rgba(2,6,23,.4)}
@@ -25,8 +23,6 @@
     .thumbs{display:flex;flex-wrap:wrap;gap:8px}
     .thumbs a{display:block}
     .thumbs img{max-width:220px;max-height:160px;border-radius:6px;display:block}
-
-    /* small screens */
     @media (max-width:600px){ .thumbs img{max-width:140px;max-height:100px} }
 
     footer{padding:8px 12px;font-size:13px;background:#f8fafc}
@@ -40,7 +36,6 @@
 
   <div id="map"></div>
 
-  <!-- Modal for gallery -->
   <div id="modal" class="modal" aria-hidden="true">
     <div class="modal-content" role="dialog" aria-modal="true">
       <div class="modal-header">
@@ -55,23 +50,12 @@
     <span class="muted">Data source: public Google Sheet (CSV). Images: public URLs (Google Cloud Storage, Cloudinary, GitHub raw, etc.)</span>
   </footer>
 
-  <!-- Libraries: Leaflet for map, PapaParse for CSV parsing -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
   <script>
-    /*************************************************************************
-     * CONFIG
-     *  - Replace SHEET_CSV_URL with the CSV export URL of your Google Sheet
-     *  - Sheet must be "published to the web" or otherwise publicly accessible
-     *  - Expected sheet columns: id,country,lat,lon,image1,image2,...image10
-     *************************************************************************/
+    const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/REPLACE_SHEET_ID/gviz/tq?tqx=out:csv&sheet=Sheet1';
 
-    const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTldb18umlbtlzZgGIgeozfF-oRihc8IVoJ_dSDULPB7mXTRAJSzyk6MAUt5rsW4io92YsZE0Y89U4A/pub?gid=0&single=true&output=csv';
-
-    /*************************************************************************
-     * Small helper: safe access to numbered image columns in the sheet rows
-     *************************************************************************/
     function collectImages(row){
       const images = [];
       for(let i=1;i<=10;i++){
@@ -81,19 +65,12 @@
       return images;
     }
 
-    /*************************************************************************
-     * Map init
-     *************************************************************************/
-    const map = L.map('map', {zoomControl:true, preferCanvas:true}).setView([20,0], 2);
-
+    const map = L.map('map').setView([20,0], 2);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    /*************************************************************************
-     * Modal handling
-     *************************************************************************/
     const modal = document.getElementById('modal');
     const gallery = document.getElementById('gallery');
     const modalTitle = document.getElementById('modal-title');
@@ -105,10 +82,7 @@
       if(!images || images.length===0){
         gallery.innerHTML = '<p>No images for this pin.</p>';
       } else {
-        const html = images.map(u => {
-          // simple image card; clicking opens full image in new tab
-          return `<a href="${escapeHtml(u)}" target="_blank" rel="noopener noreferrer"><img loading="lazy" src="${escapeHtml(u)}" alt="photo"/></a>`;
-        }).join('\n');
+        const html = images.map(u => `<a href="${escapeHtml(u)}" target="_blank" rel="noopener noreferrer"><img loading="lazy" src="${escapeHtml(u)}" alt="photo"/></a>`).join('\n');
         gallery.innerHTML = `<div class="thumbs">${html}</div>`;
       }
       modal.classList.add('open');
@@ -118,12 +92,19 @@
       modal.classList.remove('open');
       modal.setAttribute('aria-hidden','true');
     }
-
     function escapeHtml(str){ return (str+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 
-    /*************************************************************************
-     * Load CSV from Google Sheet, create markers
-     *************************************************************************/
+    let COUNTRY_CENTROIDS = {};
+
+    function getLatLon(row){
+      const lat = parseFloat(row.lat || row.latitude || row.Lat || row.Latitude);
+      const lon = parseFloat(row.lon || row.longitude || row.Lon || row.Longitude);
+      if(isFinite(lat) && isFinite(lon)) return [lat, lon];
+      const code = (row.country_code || row.country || '').trim().toUpperCase();
+      if(code && COUNTRY_CENTROIDS[code]) return COUNTRY_CENTROIDS[code];
+      return null;
+    }
+
     function loadFromSheet(csvUrl){
       if(!csvUrl || csvUrl.includes('REPLACE_SHEET_ID')){
         console.warn('Please set SHEET_CSV_URL to your published Google Sheet CSV URL.');
@@ -137,17 +118,14 @@
         complete: function(results){
           const rows = results.data;
           rows.forEach((row, idx) => {
-            const lat = parseFloat(row.lat || row.latitude || row.Lat || row.Latitude);
-            const lon = parseFloat(row.lon || row.longitude || row.Lon || row.Longitude);
-            if(!isFinite(lat) || !isFinite(lon)) return; // skip bad rows
+            const coords = getLatLon(row);
+            if(!coords) return;
 
             const images = collectImages(row);
             const title = (row.country || row.country_code || row.id || `row ${idx+1}`);
 
-            const marker = L.marker([lat,lon]).addTo(map);
+            const marker = L.marker(coords).addTo(map);
             marker.on('click', ()=> openModal(title, images));
-
-            // small hover popup showing count
             const popupText = `<strong>${escapeHtml(title)}</strong><br/>${images.length} image${images.length===1?'':'s'}`;
             marker.bindPopup(popupText);
           });
@@ -159,8 +137,12 @@
       });
     }
 
-    // Start
-    loadFromSheet(SHEET_CSV_URL);
+    // Load centroids from external JSON file
+    fetch('centroids.json')
+      .then(r => r.json())
+      .then(data => { COUNTRY_CENTROIDS = data; loadFromSheet(SHEET_CSV_URL); })
+      .catch(err => { console.error('Failed to load centroids.json', err); loadFromSheet(SHEET_CSV_URL); });
+
   </script>
 </body>
 </html>
