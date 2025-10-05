@@ -139,7 +139,7 @@
                   `<img src="${escapeHtml(u)}" alt="photo" style="max-width:${maxImageWidth}px;max-height:75px;border-radius:4px;margin:4px;"/>`
               )
               .join('');
-            const popupText = `<strong>${escapeHtml(countryName)}</strong><br/>${images.length} image${images.length === 1 ? '' : 's'}<br/>${imagesHtml}`;
+            const popupText = `<strong>${escapeHtml(title)}</strong><br/>${images.length} image${images.length === 1 ? '' : 's'}<br/>${imagesHtml}`;
 
             // Set popup options with dynamic width
             const popupOptions = {
