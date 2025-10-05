@@ -100,7 +100,7 @@
       const lat = parseFloat(row.lat || row.latitude || row.Lat || row.Latitude);
       const lon = parseFloat(row.lon || row.longitude || row.Lon || row.Longitude);
       if(isFinite(lat) && isFinite(lon)) return [lat, lon];
-      const code = (row.country_code || row.country || '').trim().toUpperCase();
+      const code = (row.country || '').trim().toUpperCase();
       if(code && COUNTRY_CENTROIDS[code]) return COUNTRY_CENTROIDS[code].coordinates;
       return null;
     }
@@ -122,8 +122,7 @@
             if(!coords) return;
 
             const images = collectImages(row);
-            const title = COUNTRY_CENTROIDS[row.country_code?.trim().toUpperCase()]?.name;
-            console.log(`coords: ${coords}. title: ${title}. images: ${images.length}`);
+            const title = COUNTRY_CENTROIDS[row.country?.trim().toUpperCase()]?.name;
 
             const marker = L.marker(coords).addTo(map);
             marker.on('click', ()=> openModal(title, images));
