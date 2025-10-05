@@ -101,7 +101,7 @@
       const lon = parseFloat(row.lon || row.longitude || row.Lon || row.Longitude);
       if(isFinite(lat) && isFinite(lon)) return [lat, lon];
       const code = (row.country_code || row.country || '').trim().toUpperCase();
-      if(code && COUNTRY_CENTROIDS[code]) return COUNTRY_CENTROIDS[code];
+      if(code && COUNTRY_CENTROIDS[code]) return COUNTRY_CENTROIDS[code].coordinates;
       return null;
     }
 
@@ -122,12 +122,32 @@
             if(!coords) return;
 
             const images = collectImages(row);
-            const title = (row.country || row.country_code || row.id || `row ${idx+1}`);
+            const title = COUNTRY_CENTROIDS[row.country_code?.trim().toUpperCase()]?.name;
+            console.log(`coords: ${coords}. title: ${title}. images: ${images.length}`);
 
             const marker = L.marker(coords).addTo(map);
             marker.on('click', ()=> openModal(title, images));
-            const popupText = `<strong>${escapeHtml(title)}</strong><br/>${images.length} image${images.length===1?'':'s'}`;
-            marker.bindPopup(popupText);
+
+            // Calculate the maximum width of the popup based on the widest image
+            const maxImageWidth = 100; // This matches the `max-width` of the images in the popup
+            const popupWidth = Math.min(images.length * (maxImageWidth + 8), 800); // Limit the popup width to 800px
+
+            // Include all images in the popup text
+            const imagesHtml = images
+              .map(
+                (u) =>
+                  `<img src="${escapeHtml(u)}" alt="photo" style="max-width:${maxImageWidth}px;max-height:75px;border-radius:4px;margin:4px;"/>`
+              )
+              .join('');
+            const popupText = `<strong>${escapeHtml(countryName)}</strong><br/>${images.length} image${images.length === 1 ? '' : 's'}<br/>${imagesHtml}`;
+
+            // Set popup options with dynamic width
+            const popupOptions = {
+              maxWidth: popupWidth,
+              minWidth: 300,
+            };
+
+            marker.bindPopup(popupText, popupOptions);
           });
         },
         error: function(err){
