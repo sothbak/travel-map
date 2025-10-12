@@ -2,36 +2,67 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>World Map — Pins + Photos</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
 
   <style>
     :root{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;}
-    body{margin:0;display:flex;flex-direction:column;height:100vh}
-    header{padding:10px 16px;background:#0f172a;color:#fff}
-    header h1{margin:0;font-size:18px}
-    #map{flex:1;min-height:300px}
+    *{box-sizing:border-box}
+    body{margin:0;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+    header{padding:12px 16px;background:#0f172a;color:#fff}
+    header h1{margin:0;font-size:18px;line-height:1.3}
+    #map{flex:1;min-height:200px;touch-action:manipulation}
 
-    .modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.55);opacity:0;pointer-events:none;transition:opacity .15s}
+    .modal{position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.55);opacity:0;pointer-events:none;transition:opacity .2s;z-index:1000}
     .modal.open{opacity:1;pointer-events:auto}
-    .modal-content{background:#fff;border-radius:10px;padding:12px;max-width:1100px;width:94%;max-height:88%;overflow:auto;box-shadow:0 10px 30px rgba(2,6,23,.4)}
-    .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-    .modal-header h2{margin:0;font-size:16px}
-    .close-btn{background:transparent;border:0;font-size:22px;cursor:pointer}
-    .thumbs{display:flex;flex-wrap:wrap;gap:8px}
-    .thumbs a{display:block}
-    .thumbs img{max-width:220px;max-height:160px;border-radius:6px;display:block}
-    @media (max-width:600px){ .thumbs img{max-width:140px;max-height:100px} }
+    .modal-content{background:#fff;border-radius:16px 16px 0 0;padding:16px;width:100%;max-height:85vh;overflow:auto;box-shadow:0 -4px 20px rgba(2,6,23,.3);transform:translateY(100%);transition:transform .3s ease-out}
+    .modal.open .modal-content{transform:translateY(0)}
+    .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e5e7eb}
+    .modal-header h2{margin:0;font-size:18px;font-weight:600}
+    .close-btn{background:#f3f4f6;border:0;font-size:24px;cursor:pointer;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#374151;transition:background .2s}
+    .close-btn:active{background:#e5e7eb}
+    .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;padding:4px 0}
+    .thumbs a{display:block;position:relative;overflow:hidden;border-radius:8px;background:#f9fafb}
+    .thumbs img{width:100%;height:120px;object-fit:cover;display:block;transition:transform .2s}
+    .thumbs a:active img{transform:scale(0.95)}
 
-    footer{padding:8px 12px;font-size:13px;background:#f8fafc}
-    .muted{color:#6b7280}
+    footer{padding:10px 12px;font-size:12px;background:#f8fafc;text-align:center}
+    .muted{color:#6b7280;line-height:1.4}
+
+    /* Tablet and larger */
+    @media (min-width:768px){
+      header h1{font-size:20px}
+      .modal{align-items:center}
+      .modal-content{border-radius:12px;max-width:900px;width:94%;max-height:88%;transform:scale(0.9);opacity:0}
+      .modal.open .modal-content{transform:scale(1);opacity:1}
+      .thumbs{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
+      .thumbs img{height:150px}
+      .close-btn:hover{background:#e5e7eb}
+      .thumbs a:hover img{transform:scale(1.05)}
+      footer{font-size:13px}
+    }
+
+    /* Larger desktop */
+    @media (min-width:1200px){
+      .modal-content{max-width:1100px}
+      .thumbs{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+    }
+
+    /* Improve popup readability on mobile */
+    .leaflet-popup-content-wrapper{border-radius:8px;padding:8px}
+    .leaflet-popup-content{margin:8px 12px;font-size:14px}
+    
+    @media (max-width:767px){
+      .leaflet-popup-content-wrapper{max-width:280px!important}
+      .leaflet-popup-content{margin:6px 10px}
+    }
   </style>
 </head>
 <body>
   <header>
-    <h1>World Map — Click a pin to see up to 10 photos</h1>
+    <h1>🗺️ World Map — Tap pins to see photos</h1>
   </header>
 
   <div id="map"></div>
@@ -47,7 +78,7 @@
   </div>
 
   <footer>
-    <span class="muted">Data source: public Google Sheet (CSV). Images: public URLs (Google Cloud Storage, Cloudinary, GitHub raw, etc.)</span>
+    <span class="muted">Data from public Google Sheet • Tap any pin to view photos</span>
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -65,33 +96,48 @@
       return images;
     }
 
-    const map = L.map('map').setView([20,0], 2);
+    const map = L.map('map', {
+      tap: true,
+      tapTolerance: 20,
+      zoomControl: true
+    }).setView([20,0], 2);
+
+    // Position zoom controls better on mobile
+    map.zoomControl.setPosition('bottomright');
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '© OpenStreetMap contributors'
+      attribution: '© OpenStreetMap'
     }).addTo(map);
 
     const modal = document.getElementById('modal');
     const gallery = document.getElementById('gallery');
     const modalTitle = document.getElementById('modal-title');
-    document.getElementById('close').addEventListener('click', ()=> closeModal());
+    const closeBtn = document.getElementById('close');
+    
+    closeBtn.addEventListener('click', ()=> closeModal());
     modal.addEventListener('click', (e)=> { if(e.target===modal) closeModal(); });
 
+    // Prevent body scroll when modal is open
     function openModal(title, images){
       modalTitle.textContent = title || 'Photos';
       if(!images || images.length===0){
-        gallery.innerHTML = '<p>No images for this pin.</p>';
+        gallery.innerHTML = '<p style="color:#6b7280;text-align:center;padding:20px">No images available for this location.</p>';
       } else {
         const html = images.map(u => `<a href="${escapeHtml(u)}" target="_blank" rel="noopener noreferrer"><img loading="lazy" src="${escapeHtml(u)}" alt="photo"/></a>`).join('\n');
         gallery.innerHTML = `<div class="thumbs">${html}</div>`;
       }
       modal.classList.add('open');
       modal.setAttribute('aria-hidden','false');
+      document.body.style.overflow = 'hidden';
     }
+    
     function closeModal(){
       modal.classList.remove('open');
       modal.setAttribute('aria-hidden','true');
+      document.body.style.overflow = '';
     }
+    
     function escapeHtml(str){ return (str+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 
     let COUNTRY_CENTROIDS = {};
@@ -122,36 +168,35 @@
             if(!coords) return;
 
             const images = collectImages(row);
-            const title = COUNTRY_CENTROIDS[row.country?.trim().toUpperCase()]?.name;
+            const title = COUNTRY_CENTROIDS[row.country?.trim().toUpperCase()]?.name || 'Location';
 
             const marker = L.marker(coords).addTo(map);
-            marker.on('click', ()=> openModal(title, images));
+            
+            // Open modal on marker click
+            marker.on('click', ()=> {
+              openModal(title, images);
+              map.closePopup(); // Close any open popups
+            });
 
-            // Calculate the maximum width of the popup based on the widest image
-            const maxImageWidth = 100; // This matches the `max-width` of the images in the popup
-            const popupWidth = Math.min(images.length * (maxImageWidth + 8), 800); // Limit the popup width to 800px
-
-            // Include all images in the popup text
-            const imagesHtml = images
-              .map(
-                (u) =>
-                  `<img src="${escapeHtml(u)}" alt="photo" style="max-width:${maxImageWidth}px;max-height:75px;border-radius:4px;margin:4px;"/>`
-              )
+            // Create compact popup for quick preview
+            const imageCount = images.length;
+            const previewImages = images.slice(0, 3);
+            const imagesHtml = previewImages
+              .map(u => `<img src="${escapeHtml(u)}" alt="photo" style="width:60px;height:60px;object-fit:cover;border-radius:4px;margin:2px;"/>`)
               .join('');
-            const popupText = `<strong>${escapeHtml(title)}</strong><br/>${images.length} image${images.length === 1 ? '' : 's'}<br/>${imagesHtml}`;
+            
+            const popupText = `<div style="text-align:center"><strong>${escapeHtml(title)}</strong><br/><span style="font-size:13px;color:#6b7280">${imageCount} photo${imageCount === 1 ? '' : 's'}</span><br/><div style="margin-top:6px">${imagesHtml}${imageCount > 3 ? '<div style="font-size:12px;color:#9ca3af;margin-top:4px">+' + (imageCount - 3) + ' more</div>' : ''}</div></div>`;
 
-            // Set popup options with dynamic width
-            const popupOptions = {
-              maxWidth: popupWidth,
-              minWidth: 300,
-            };
-
-            marker.bindPopup(popupText, popupOptions);
+            marker.bindPopup(popupText, {
+              maxWidth: 250,
+              minWidth: 180,
+              closeButton: true
+            });
           });
         },
         error: function(err){
           console.error('Error loading CSV:', err);
-          alert('Failed to load sheet CSV. Make sure the SHEET_CSV_URL is correct and the sheet is published to the web.');
+          alert('Failed to load data. Please check your connection.');
         }
       });
     }
